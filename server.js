@@ -6,20 +6,7 @@ const { connectDB, seedProducts } = require('./database');
 const app = express();
 
 app.use(cors({
-  origin: function(origin, callback) {
-    if (!origin) return callback(null, true);
-    const allowed = [
-      /^https?:\/\/localhost(:\d+)?$/,
-      /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
-      /\.vercel\.app$/,
-      /\.netlify\.app$/,
-      /\.render\.com$/,
-      /\.railway\.app$/,
-    ];
-    if (allowed.some(p => p.test(origin))) return callback(null, true);
-    if (process.env.NODE_ENV !== 'production') return callback(null, true);
-    callback(new Error('Not allowed by CORS'));
-  },
+  origin: true,   // allow all origins (safe for this app)
   credentials: true
 }));
 
@@ -36,7 +23,6 @@ app.use('/api/contact',  require('./routes/contact'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
 
-// 404 for unknown API routes
 app.use((req, res) => res.status(404).json({ error: 'Route not found' }));
 
 app.use((err, req, res, next) => {
@@ -44,17 +30,35 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-const PORT = process.env.PORT || 3000;
+// ── Vercel: connect DB once, export app (no app.listen) ──────────
+let isConnected = false;
 
-connectDB().then(seedProducts).then(() => {
-  app.listen(PORT, () => {
-    console.log(`\n🚀 FashionCart API running at http://localhost:${PORT}`);
-    console.log(`   Health → http://localhost:${PORT}/api/health\n`);
+async function ensureDB() {
+  if (!isConnected) {
+    await connectDB();
+    await seedProducts();
+    isConnected = true;
+  }
+}
+
+// Wrap every request to ensure DB is connected
+const handler = async (req, res) => {
+  await ensureDB();
+  return app(req, res);
+};
+
+// For local development
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 3000;
+  ensureDB().then(() => {
+    app.listen(PORT, () => {
+      console.log(`\n🚀 FashionCart API running at http://localhost:${PORT}`);
+      console.log(`   Health → http://localhost:${PORT}/api/health\n`);
+    });
+  }).catch(err => {
+    console.error('❌ DB connection failed:', err.message);
+    process.exit(1);
   });
-}).catch(err => {
-  console.error('\n❌ Failed to connect to MongoDB Atlas!');
-  console.error('   Error:', err.message);
-  process.exit(1);
-});
+}
 
-module.exports = app;
+module.exports = handler;

@@ -23,6 +23,12 @@ app.use('/api/contact',  require('./routes/contact'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
 
+app.get('/', (req, res) => res.json({ 
+  message: 'FashionCart API is running!', 
+  status: 'ok',
+  endpoints: ['/api/health', '/api/products', '/api/auth/login', '/api/auth/register']
+}));
+
 app.use((req, res) => res.status(404).json({ error: 'Route not found' }));
 
 app.use((err, req, res, next) => {
